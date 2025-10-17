@@ -143,6 +143,25 @@ conf_parse (const char *path, struct conf *conf)
       continue;
     }
 
+    if (strcmp (option, "request-window") == 0) {
+      char *str = strtok (NULL, delims);
+      if (str == NULL) {
+        log_error ("%s:%d: Missing request window", path, lineno);
+        ret = -1;
+        goto done;
+      }
+
+      int time = parse_time (str);
+      if (time < 0) {
+        log_error ("%s:%d: Invalid request window: %s", path, lineno, str);
+        ret = -1;
+        goto done;
+      }
+
+      conf->request_window = time;
+      continue;
+    }
+
     if (strcmp (option, "range") == 0) {
       char *str = strtok (NULL, delims);
       if (str == NULL) {

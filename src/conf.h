@@ -33,6 +33,10 @@ struct conf {
   /* Subnet mask */
   in_addr_t subnet_mask;
 
+  /* Time during which an offered address is reserved
+   * waiting for a request. */
+  time_t request_window;
+
   /* Lease time */
   time_t lease_time;
 
