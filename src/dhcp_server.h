@@ -9,5 +9,7 @@ extern struct conf g_conf;
 extern struct lease_queue g_leaseq;
 extern struct addr_space g_aspace;
 extern int g_sockfd;
+extern in_addr_t g_server_addr;
+extern char g_hostname[];
 
 #endif

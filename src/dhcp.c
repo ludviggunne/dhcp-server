@@ -29,7 +29,6 @@ dhcp_oit_take (struct dhcp_oit *it, uint8_t *buf, uint8_t len)
 
   it->opts += len;
   it->left -= len;
-  it->done = it->left == 0;
 
   return 0;
 }
@@ -71,8 +70,13 @@ dhcp_opt_add (const struct dhcp_opt *opt, struct dhcp_oit *it)
   if (dhcp_oit_add (it, &opt->tag, 1) < 0)
     return -1;
 
-  if (opt->tag == DHCP_OPT_PAD_OPTION || opt->tag == DHCP_OPT_END_OPTION)
+  if (opt->tag == DHCP_OPT_PAD_OPTION)
     return 0;
+
+  if (opt->tag == DHCP_OPT_END_OPTION) {
+    memset (it->opts, 0, it->left);
+    return 0;
+  }
 
   if (dhcp_oit_add (it, &opt->len, 1) < 0)
     return -1;
@@ -105,3 +109,17 @@ dhcp_opt_take (struct dhcp_opt *opt, struct dhcp_oit *it)
   return dhcp_oit_take (it, opt->buf, opt->len);
 }
 
+const char *
+dhcp_msg_type_str (uint8_t type)
+{
+  switch (type) {
+  case DHCP_MSG_TYPE_DHCPDISCOVER: return "DHCPDISCOVER";
+  case DHCP_MSG_TYPE_DHCPOFFER: return "DHCPOFFER";
+  case DHCP_MSG_TYPE_DHCPREQUEST: return "DHCPREQUEST";
+  case DHCP_MSG_TYPE_DHCPDECLINE: return "DHCPDECLINE";
+  case DHCP_MSG_TYPE_DHCPACK: return "DHCPACK";
+  case DHCP_MSG_TYPE_DHCPNAK: return "DHCPNAK";
+  case DHCP_MSG_TYPE_DHCPRELEASE: return "DHCPRELEASE";
+  default: return "???";
+  }
+}
