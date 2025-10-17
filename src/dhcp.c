@@ -2,10 +2,10 @@
 
 #include "dhcp.h"
 
-static uint8_t dhcp_opt_magic_cookie[4] = {99, 130, 83, 99};
+static uint8_t magic_cookie[4] = {99, 130, 83, 99};
 
 static int
-dhcp_opt_iterator_add (struct dhcp_opt_iterator *it, const uint8_t *buf, uint8_t len)
+dhcp_oit_add (struct dhcp_oit *it, const uint8_t *buf, uint8_t len)
 {
   if (len > it->left)
     return -1;
@@ -20,7 +20,7 @@ dhcp_opt_iterator_add (struct dhcp_opt_iterator *it, const uint8_t *buf, uint8_t
 }
 
 static int
-dhcp_opt_iterator_take(struct dhcp_opt_iterator *it, uint8_t *buf, uint8_t len)
+dhcp_oit_take(struct dhcp_oit *it, uint8_t *buf, uint8_t len)
 {
   if (len > it->left)
     return -1;
@@ -34,10 +34,10 @@ dhcp_opt_iterator_take(struct dhcp_opt_iterator *it, uint8_t *buf, uint8_t len)
   return 0;
 }
 
-struct dhcp_opt_iterator
-dhcp_opt_iterator_init(struct dhcp_msg *msg)
+struct dhcp_oit
+dhcp_oit_init(struct dhcp_msg *msg)
 {
-  return (struct dhcp_opt_iterator) {
+  return (struct dhcp_oit) {
     .opts = msg->options,
     .done = 0,
     .left = sizeof(msg->options),
@@ -45,53 +45,53 @@ dhcp_opt_iterator_init(struct dhcp_msg *msg)
 }
 
 int
-dhcp_opt_add_magic_cookie(struct dhcp_opt_iterator *it)
+dhcp_add_magic_cookie(struct dhcp_oit *it)
 {
-  return dhcp_opt_iterator_add(it, dhcp_opt_magic_cookie, sizeof(dhcp_opt_magic_cookie));
+  return dhcp_oit_add(it, magic_cookie, sizeof(magic_cookie));
 }
 
 int
-dhcp_opt_take_magic_cookie(struct dhcp_opt_iterator *it)
+dhcp_eat_magic_cookie(struct dhcp_oit *it)
 {
-  uint8_t buf[sizeof(dhcp_opt_magic_cookie)];
+  uint8_t buf[sizeof(magic_cookie)];
 
-  if (dhcp_opt_iterator_take(it, buf, sizeof(buf)) < 0)
+  if (dhcp_oit_take(it, buf, sizeof(buf)) < 0)
     return -1;
 
   for (size_t i = 0; i < sizeof(buf); i++)
-    if (buf[i] != dhcp_opt_magic_cookie[i])
+    if (buf[i] != magic_cookie[i])
       return -1;
 
   return 0;
 }
 
 int
-dhcp_opt_add_option(const struct dhcp_opt *opt, struct dhcp_opt_iterator *it)
+dhcp_opt_add(const struct dhcp_opt *opt, struct dhcp_oit *it)
 {
-  if (dhcp_opt_iterator_add(it, &opt->tag, 1) < 0)
+  if (dhcp_oit_add(it, &opt->tag, 1) < 0)
     return -1;
 
   if (opt->tag == DHCP_OPT_PAD_OPTION || opt->tag == DHCP_OPT_END_OPTION)
     return 0;
 
-  if (dhcp_opt_iterator_add(it, &opt->len, 1) < 0)
+  if (dhcp_oit_add(it, &opt->len, 1) < 0)
     return -1;
 
-  return dhcp_opt_iterator_add(it, opt->buf, opt->len);
+  return dhcp_oit_add(it, opt->buf, opt->len);
 }
 
 int
-dhcp_opt_take_option(struct dhcp_opt *opt, struct dhcp_opt_iterator *it)
+dhcp_opt_take(struct dhcp_opt *opt, struct dhcp_oit *it)
 {
   for (;;) {
-    if (dhcp_opt_iterator_take(it, &opt->tag, 1) < 0)
+    if (dhcp_oit_take(it, &opt->tag, 1) < 0)
       return -1;
 
     if (opt->tag != DHCP_OPT_PAD_OPTION)
       break;
   }
 
-  if (dhcp_opt_iterator_take(it, &opt->len, 1) < 0)
+  if (dhcp_oit_take(it, &opt->len, 1) < 0)
     return -1;
 
   // TODO

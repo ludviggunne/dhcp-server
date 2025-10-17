@@ -93,10 +93,10 @@ main (int argc, char **argv)
     msg.flags = ntohs (msg.flags);
     msg.xid = ntohl (msg.xid);
 
-    struct dhcp_opt_iterator it = dhcp_opt_iterator_init(&msg);
+    struct dhcp_oit it = dhcp_oit_init(&msg);
     struct dhcp_opt opt;
 
-    if (dhcp_opt_eat_magic_cookie (&it) < 0) {
+    if (dhcp_eat_magic_cookie (&it) < 0) {
       log_error ("Failed to parse message: missing or invalid magic cookie");
       continue;
     }
@@ -104,7 +104,7 @@ main (int argc, char **argv)
     int have_msg_type = 0;
     enum dhcp_msg_type type;
     while (!it.done) {
-      if (dhcp_opt_take_option (&opt, &it) < 0) {
+      if (dhcp_opt_take (&opt, &it) < 0) {
         log_error ("Error while parsing options");
         break;
       }

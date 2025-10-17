@@ -34,17 +34,17 @@ struct dhcp_opt {
   uint8_t tag;
 };
 
-struct dhcp_opt_iterator {
+struct dhcp_oit {
   uint8_t *opts;
   size_t left;
   int done;
 };
 
-struct dhcp_opt_iterator dhcp_opt_iterator_init (struct dhcp_msg *msg);
-int dhcp_opt_add_magic_cookie (struct dhcp_opt_iterator *it);
-int dhcp_opt_eat_magic_cookie (struct dhcp_opt_iterator *it);
-int dhcp_opt_add_option (const struct dhcp_opt *opt, struct dhcp_opt_iterator *it);
-int dhcp_opt_take_option (struct dhcp_opt *opt, struct dhcp_opt_iterator *it);
+struct dhcp_oit dhcp_oit_init (struct dhcp_msg *msg);
+int dhcp_add_magic_cookie (struct dhcp_oit *it);
+int dhcp_eat_magic_cookie (struct dhcp_oit *it);
+int dhcp_opt_add (const struct dhcp_opt *opt, struct dhcp_oit *it);
+int dhcp_opt_take (struct dhcp_opt *opt, struct dhcp_oit *it);
 
 const char *dhcp_msg_type_str (uint8_t type);
 const char *dhcp_opt_str (uint8_t opt);
