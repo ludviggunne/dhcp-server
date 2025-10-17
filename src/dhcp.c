@@ -91,9 +91,17 @@ dhcp_opt_take (struct dhcp_opt *opt, struct dhcp_oit *it)
       break;
   }
 
+  if (opt->tag == DHCP_OPT_END_OPTION) {
+    it->done = 1;
+    return 0;
+  }
+
   if (dhcp_oit_take (it, &opt->len, 1) < 0)
     return -1;
 
-  // TODO
+  if (opt->len > it->left)
+    return -1;
+
+  return dhcp_oit_take (it, opt->buf, opt->len);
 }
 
