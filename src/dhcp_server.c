@@ -89,6 +89,13 @@ main (int argc, char **argv)
       continue;
     }
 
+    if (msg.hlen != ETHER_ADDR_LEN) {
+      log_error ("Hardware address length is %d != %d", msg.hlen, ETHER_ADDR_LEN);
+      continue;
+    }
+
+    log_info ("Received message from %s", ether_ntoa ((struct ether_addr *) msg.chaddr));
+
     msg.secs = ntohs (msg.secs);
     msg.flags = ntohs (msg.flags);
     msg.xid = ntohl (msg.xid);
