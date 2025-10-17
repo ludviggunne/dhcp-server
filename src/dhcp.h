@@ -42,14 +42,14 @@ struct dhcp_opt_iterator {
 
 struct dhcp_opt_iterator dhcp_opt_iterator_init (struct dhcp_msg *msg);
 int dhcp_opt_add_magic_cookie (struct dhcp_opt_iterator *it);
-int dhcp_opt_take_magic_cookie (struct dhcp_opt_iterator *it);
+int dhcp_opt_eat_magic_cookie (struct dhcp_opt_iterator *it);
 int dhcp_opt_add_option (const struct dhcp_opt *opt, struct dhcp_opt_iterator *it);
 int dhcp_opt_take_option (struct dhcp_opt *opt, struct dhcp_opt_iterator *it);
 
 const char *dhcp_msg_type_str (uint8_t type);
 const char *dhcp_opt_str (uint8_t opt);
 
-enum dhc_msg_type {
+enum dhcp_msg_type {
   DHCP_MSG_TYPE_DHCPDISCOVER = 1,
   DHCP_MSG_TYPE_DHCPOFFER = 2,
   DHCP_MSG_TYPE_DHCPREQUEST = 3,
@@ -59,7 +59,7 @@ enum dhc_msg_type {
   DHCP_MSG_TYPE_DHCPRELEASE = 7,
 };
 
-enum dhc_port {
+enum dhcp_port {
   DHCP_PORT_SERVER = 67,
   DHCP_PORT_CLIENT = 68,
 };

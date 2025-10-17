@@ -5,7 +5,7 @@
 static uint8_t dhcp_opt_magic_cookie[4] = {99, 130, 83, 99};
 
 static int
-dhcp_opt_iterator_add (dhcp_opt_iterator_t *it, const uint8_t *buf, uint8_t len)
+dhcp_opt_iterator_add (struct dhcp_opt_iterator *it, const uint8_t *buf, uint8_t len)
 {
   if (len > it->left)
     return -1;
@@ -20,7 +20,7 @@ dhcp_opt_iterator_add (dhcp_opt_iterator_t *it, const uint8_t *buf, uint8_t len)
 }
 
 static int
-dhcp_opt_iterator_take(dhcp_opt_iterator_t *it, uint8_t *buf, uint8_t len)
+dhcp_opt_iterator_take(struct dhcp_opt_iterator *it, uint8_t *buf, uint8_t len)
 {
   if (len > it->left)
     return -1;
@@ -34,10 +34,10 @@ dhcp_opt_iterator_take(dhcp_opt_iterator_t *it, uint8_t *buf, uint8_t len)
   return 0;
 }
 
-dhcp_opt_iterator_t
-dhcp_opt_iterator_init(dhcp_msg_t *msg)
+struct dhcp_opt_iterator
+dhcp_opt_iterator_init(struct dhcp_msg *msg)
 {
-  return (dhcp_opt_iterator_t) {
+  return (struct dhcp_opt_iterator) {
     .opts = msg->options,
     .done = 0,
     .left = sizeof(msg->options),
@@ -45,13 +45,13 @@ dhcp_opt_iterator_init(dhcp_msg_t *msg)
 }
 
 int
-dhcp_opt_add_magic_cookie(dhcp_opt_iterator_t *it)
+dhcp_opt_add_magic_cookie(struct dhcp_opt_iterator *it)
 {
   return dhcp_opt_iterator_add(it, dhcp_opt_magic_cookie, sizeof(dhcp_opt_magic_cookie));
 }
 
 int
-dhcp_opt_take_magic_cookie(dhcp_opt_iterator_t *it)
+dhcp_opt_take_magic_cookie(struct dhcp_opt_iterator *it)
 {
   uint8_t buf[sizeof(dhcp_opt_magic_cookie)];
 
@@ -66,7 +66,7 @@ dhcp_opt_take_magic_cookie(dhcp_opt_iterator_t *it)
 }
 
 int
-dhcp_opt_add_option(const dhcp_opt_t *opt, dhcp_opt_iterator_t *it)
+dhcp_opt_add_option(const struct dhcp_opt *opt, struct dhcp_opt_iterator *it)
 {
   if (dhcp_opt_iterator_add(it, &opt->tag, 1) < 0)
     return -1;
@@ -81,7 +81,7 @@ dhcp_opt_add_option(const dhcp_opt_t *opt, dhcp_opt_iterator_t *it)
 }
 
 int
-dhcp_opt_take_option(dhcp_opt_t *opt, dhcp_opt_iterator_t *it)
+dhcp_opt_take_option(struct dhcp_opt *opt, struct dhcp_opt_iterator *it)
 {
   for (;;) {
     if (dhcp_opt_iterator_take(it, &opt->tag, 1) < 0)
