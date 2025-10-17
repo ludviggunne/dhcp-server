@@ -28,6 +28,7 @@ static char *inet_str (in_addr_t in_addr);
 static void process_discover (struct dhcp_msg *msg);
 static void process_request (struct dhcp_msg *msg);
 static void process_release (struct dhcp_msg *msg);
+static void process_decline (struct dhcp_msg *msg);
 
 int
 main (int argc, char **argv)
@@ -168,6 +169,9 @@ main (int argc, char **argv)
     // case DHCP_MSG_TYPE_DHCPRELEASE:
     //   process_release(&msg);
     //   break;
+    // case DHCP_MSG_TYPE_DHCPDECLINE:
+    //   process_decline(&msg);
+    //   break;
     default:
       log_info ("Unhandled message type");
       break;
@@ -306,11 +310,6 @@ process_request (struct dhcp_msg *msg)
     }
   }
 
-  if (req_addr == 0) {
-    log_error ("Missing requested address");
-    return;
-  }
-
   /* Check if lease exists */
   int lease_id = -1;
   for (int i = 0; i < g_leaseq.nleases; i++) {
@@ -324,13 +323,15 @@ process_request (struct dhcp_msg *msg)
 
   /* Refuse if requested address doesn't match
    * existing lease. */
-  if (lease_id >= 0 && g_leaseq.leases[lease_id].in_addr != req_addr) {
+  in_addr_t in_addr;
+  if (lease_id >= 0 && req_addr != 0 && g_leaseq.leases[lease_id].in_addr != req_addr) {
     log_error ("Requested address doesn't match existing lease (%s)",
                inet_str (g_leaseq.leases[lease_id].in_addr));
     msg_type = DHCP_MSG_TYPE_DHCPNAK;
   } else if (lease_id >= 0) {
     /* Remove existing lease */
     lq_remove (&g_leaseq, lease_id);
+    in_addr = g_leaseq.leases[lease_id].in_addr;
   }
 
   uint32_t lease_time = g_conf.lease_time;
@@ -350,10 +351,12 @@ process_request (struct dhcp_msg *msg)
 
     /* Refuse if requested address doesn't match
      * static configuration */
-    if (sconf && sconf->in_addr != req_addr) {
+    if (sconf && req_addr != 0 && sconf->in_addr != req_addr) {
       log_error ("Requested address doesn't match static configuration (%s)",
                  inet_str (sconf->in_addr));
       msg_type = DHCP_MSG_TYPE_DHCPNAK;
+    } else if (sconf) {
+      in_addr = sconf->in_addr;
     }
 
     /* No existsing lease and no static
@@ -367,7 +370,7 @@ process_request (struct dhcp_msg *msg)
   if (msg_type != DHCP_MSG_TYPE_DHCPNAK) {
     log_info ("Updating lease");
     struct lease lease;
-    lease.in_addr = req_addr;
+    lease.in_addr = in_addr;
     memcpy (&lease.ether_addr, msg->chaddr, sizeof (lease.ether_addr));
     lease.expire = now + lease_time;
     lq_add (&g_leaseq, &lease);
@@ -384,7 +387,7 @@ process_request (struct dhcp_msg *msg)
   reply.siaddr = 0;
 
   if (msg_type == DHCP_MSG_TYPE_DHCPACK)
-    reply.yiaddr = req_addr;
+    reply.yiaddr = in_addr;
   else
     reply.yiaddr = 0;
 
