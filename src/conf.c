@@ -70,10 +70,11 @@ int
 conf_parse (const char *path, struct conf *conf)
 {
   const char *const delims = " \t\n";
+  int ret = 0;
 
   FILE *f = fopen (path, "r");
   if (f == NULL) {
-    log_errno ("Failed to open configuration file %s");
+    log_errno ("Failed to open configuration file %s", path);
     return -1;
   }
 
@@ -97,7 +98,8 @@ conf_parse (const char *path, struct conf *conf)
       char *name = strtok (NULL, delims);
       if (name == NULL) {
         log_error ("%s:%d: Missing interface name", path, lineno);
-        return -1;
+        ret = -1;
+        goto done;
       }
       conf->interface = strdup (name);
       continue;
@@ -107,13 +109,15 @@ conf_parse (const char *path, struct conf *conf)
       char *str = strtok (NULL, delims);
       if (str == NULL) {
         log_error ("%s:%d: Missing subnet mask", path, lineno);
-        return -1;
+        ret = -1;
+        goto done;
       }
 
       if (inet_pton (AF_INET, str, &addr_buf) != 1
           || check_subnet_mask (addr_buf.s_addr) < 0) {
         log_error ("%s:%d: Invalid subnet mask: %s", path, lineno, str);
-        return -1;
+        ret = -1;
+        goto done;
       }
 
       conf->subnet_mask = addr_buf.s_addr;
@@ -124,13 +128,15 @@ conf_parse (const char *path, struct conf *conf)
       char *str = strtok (NULL, delims);
       if (str == NULL) {
         log_error ("%s:%d: Missing lease time", path, lineno);
-        return -1;
+        ret = -1;
+        goto done;
       }
 
       int time = parse_time (str);
       if (time < 0) {
         log_error ("%s:%d: Invalid lease time: %s", path, lineno, str);
-        return -1;
+        ret = -1;
+        goto done;
       }
 
       conf->lease_time = time;
@@ -141,12 +147,14 @@ conf_parse (const char *path, struct conf *conf)
       char *str = strtok (NULL, delims);
       if (str == NULL) {
         log_error ("%s:%d: Missing low address in range", path, lineno);
-        return -1;
+        ret = -1;
+        goto done;
       }
 
       if (inet_pton (AF_INET, str, &addr_buf) != 1) {
         log_error ("%s:%d: Invalid high address in range: %s", path, lineno, str);
-        return -1;
+        ret = -1;
+        goto done;
       }
 
       conf->range_lo = addr_buf.s_addr;
@@ -154,12 +162,14 @@ conf_parse (const char *path, struct conf *conf)
       str = strtok (NULL, delims);
       if (str == NULL) {
         log_error ("%s:%d: Missing high address in range", path, lineno);
-        return -1;
+        ret = -1;
+        goto done;
       }
 
       if (inet_pton (AF_INET, str, &addr_buf) != 1) {
         log_error ("%s:%d: Invalid high address in range: %s", path, lineno, str);
-        return -1;
+        ret = -1;
+        goto done;
       }
 
       conf->range_hi = addr_buf.s_addr;
@@ -175,14 +185,16 @@ conf_parse (const char *path, struct conf *conf)
       char *str = strtok (NULL, delims);
       if (str == NULL) {
         log_error ("%s:%d: Missing hardware address", path, lineno);
-        return -1;
+        ret = -1;
+        goto done;
       }
 
       ether_ptr = ether_aton (str);
 
       if (ether_ptr == NULL) {
         log_error ("%s:%d: Invalid hardware address: %s", path, lineno, str);
-        return -1;
+        ret = -1;
+        goto done;
       }
 
       memcpy (&static_conf->ether_addr, ether_ptr, sizeof (struct ether_addr));
@@ -190,12 +202,14 @@ conf_parse (const char *path, struct conf *conf)
       str = strtok (NULL, delims);
       if (str == NULL) {
         log_error ("%s:%d: Missing IPv4 address", path, lineno);
-        return -1;
+        ret = -1;
+        goto done;
       }
 
       if (inet_pton (AF_INET, str, &addr_buf) != 1) {
         log_error ("%s:%d: Invalid IPv4 address: %s", path, lineno, str);
-        return -1;
+        ret = -1;
+        goto done;
       }
 
       static_conf->in_addr = addr_buf.s_addr;
@@ -210,7 +224,8 @@ conf_parse (const char *path, struct conf *conf)
       int time = parse_time (str);
       if (time < 0) {
         log_error ("%s:%d: Invalid lease time: %s", path, lineno, str);
-        return -1;
+        ret = -1;
+        goto done;
       }
 
       static_conf->lease_time = time;
@@ -218,8 +233,11 @@ conf_parse (const char *path, struct conf *conf)
     }
 
     log_error ("%s:%d: Unknown configuration option '%s'", path, lineno, option);
-    return -1;
+    ret = -1;
+    goto done;
   }
 
-  return 0;
+done:
+  fclose (f);
+  return ret;
 }
