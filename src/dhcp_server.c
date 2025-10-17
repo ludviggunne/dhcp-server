@@ -1,6 +1,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <limits.h>
+#include <assert.h>
 
 #include <unistd.h>
 #include <ifaddrs.h>
@@ -161,9 +162,9 @@ main (int argc, char **argv)
     case DHCP_MSG_TYPE_DHCPDISCOVER:
       process_discover(&msg);
       break;
-    // case DHCP_MSG_TYPE_DHCPREQUEST:
-    //   process_request(&msg);
-    //   break;
+    case DHCP_MSG_TYPE_DHCPREQUEST:
+      process_request(&msg);
+      break;
     // case DHCP_MSG_TYPE_DHCPRELEASE:
     //   process_release(&msg);
     //   break;
@@ -275,6 +276,160 @@ process_discover (struct dhcp_msg *msg)
 
   /* Send reply */
   log_info ("Replying with %s", dhcp_msg_type_str (DHCP_MSG_TYPE_DHCPOFFER));
+  if (sendto (g_sockfd, &reply, sizeof (reply), 0,
+              (struct sockaddr*) &client_addr, sizeof (client_addr)) < 0)
+    log_errno ("sendto() failed");
+}
+
+static void
+process_request (struct dhcp_msg *msg)
+{
+  enum dhcp_msg_type msg_type = DHCP_MSG_TYPE_DHCPACK;
+  time_t now = time (NULL);
+
+  /* Determine requested address */
+  struct dhcp_oit it = dhcp_oit_init (msg);
+  assert (dhcp_eat_magic_cookie (&it) == 0);
+
+  in_addr_t req_addr = 0;
+  while (!it.done) {
+    struct dhcp_opt opt;
+    if (dhcp_opt_take (&opt, &it) < 0) {
+      log_error ("Failed to parse message options");
+      return;
+    }
+
+    if (opt.tag == DHCP_OPT_REQUESTED_IP_ADDRESS) {
+      memcpy (&req_addr, opt.buf, 4);
+      log_info ("Requested address is %s", inet_str (req_addr));
+      break;
+    }
+  }
+
+  if (req_addr == 0) {
+    log_error ("Missing requested address");
+    return;
+  }
+
+  /* Check if lease exists */
+  int lease_id = -1;
+  for (int i = 0; i < g_leaseq.nleases; i++) {
+    struct ether_addr *ether = &g_leaseq.leases[i].ether_addr;
+    if (memcmp (ether, msg->chaddr, sizeof (*ether)) == 0) {
+      log_info ("Lease exists");
+      lease_id = i;
+      break;
+    }
+  }
+
+  /* Refuse if requested address doesn't match
+   * existing lease. */
+  if (lease_id >= 0 && g_leaseq.leases[lease_id].in_addr != req_addr) {
+    log_error ("Requested address doesn't match existing lease (%s)",
+               inet_str (g_leaseq.leases[lease_id].in_addr));
+    msg_type = DHCP_MSG_TYPE_DHCPNAK;
+  } else if (lease_id >= 0) {
+    /* Remove existing lease */
+    lq_remove (&g_leaseq, lease_id);
+  }
+
+  uint32_t lease_time = g_conf.lease_time;
+
+  if (msg_type != DHCP_MSG_TYPE_DHCPNAK) {
+    /* Check if host is statically configured */
+    struct static_conf *sconf = NULL;
+    for (int i = 0; i < g_conf.nstatic_confs; i++) {
+      struct ether_addr *ether = &g_conf.static_confs[i].ether_addr;
+      if (memcmp (ether, msg->chaddr, sizeof (*ether)) == 0) {
+        log_info ("Static configuration exists");
+        sconf = &g_conf.static_confs[i];
+        lease_time = sconf->lease_time;
+        break;
+      }
+    }
+
+    /* Refuse if requested address doesn't match
+     * static configuration */
+    if (sconf && sconf->in_addr != req_addr) {
+      log_error ("Requested address doesn't match static configuration (%s)",
+                 inet_str (sconf->in_addr));
+      msg_type = DHCP_MSG_TYPE_DHCPNAK;
+    }
+
+    /* No existsing lease and no static
+     * configuration -> refuse */
+    if (lease_id < 0 && sconf == NULL) {
+      msg_type = DHCP_MSG_TYPE_DHCPNAK;
+    }
+  }
+
+  /* Create new lease */
+  if (msg_type != DHCP_MSG_TYPE_DHCPNAK) {
+    log_info ("Updating lease");
+    struct lease lease;
+    lease.in_addr = req_addr;
+    memcpy (&lease.ether_addr, msg->chaddr, sizeof (lease.ether_addr));
+    lease.expire = now + lease_time;
+    lq_add (&g_leaseq, &lease);
+  }
+
+  /* Create reply */
+  struct dhcp_msg reply;
+  memcpy (&reply, msg, sizeof (reply));
+
+  /* Set message fields */
+  reply.op = DHCP_OP_BOOTREPLY;
+  reply.hops = 0;
+  reply.secs = 0;
+  reply.siaddr = 0;
+
+  if (msg_type == DHCP_MSG_TYPE_DHCPACK)
+    reply.yiaddr = req_addr;
+  else
+    reply.yiaddr = 0;
+
+  memset (reply.sname, 0, sizeof (reply.sname));
+  memset (reply.file, 0, sizeof (reply.file));
+  memcpy (reply.sname, g_hostname, sizeof (reply.sname) - 1);
+
+  /* Set message options */
+  struct dhcp_opt opt;
+  it = dhcp_oit_init (&reply);
+  dhcp_add_magic_cookie (&it);
+
+  /* Message type */
+  opt.tag = DHCP_OPT_DHCP_MESSAGE_TYPE;
+  opt.len = 1;
+  opt.buf[0] = msg_type;
+  dhcp_opt_add (&opt, &it);
+
+  /* Server address */
+  opt.tag = DHCP_OPT_SERVER_IDENTIFIER;
+  opt.len = 4;
+  memcpy (opt.buf, &g_server_addr, 4);
+  dhcp_opt_add (&opt, &it);
+
+  /* Subnet mask */
+  opt.tag = DHCP_OPT_SUBNET_MASK;
+  opt.len = 4;
+  memcpy (opt.buf, &g_conf.subnet_mask, 4);
+  dhcp_opt_add (&opt, &it);
+
+  /* Lease time (for DHCPACK) */
+  if (msg_type == DHCP_MSG_TYPE_DHCPACK) {
+    lease_time = htonl (lease_time);
+    opt.tag = DHCP_OPT_IP_ADDRESS_LEASE_TIME;
+    opt.len = 4;
+    memcpy (opt.buf, &lease_time, 4);
+    dhcp_opt_add (&opt, &it);
+  }
+
+  /* End of options */
+  opt.tag = DHCP_OPT_END_OPTION;
+  dhcp_opt_add (&opt, &it);
+
+  /* Send reply */
+  log_info ("Replying with %s", dhcp_msg_type_str (msg_type));
   if (sendto (g_sockfd, &reply, sizeof (reply), 0,
               (struct sockaddr*) &client_addr, sizeof (client_addr)) < 0)
     log_errno ("sendto() failed");
