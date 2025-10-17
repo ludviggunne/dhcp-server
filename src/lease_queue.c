@@ -1,7 +1,9 @@
 #include <stdlib.h>
 #include <string.h>
+#include <arpa/inet.h>
 
 #include "lease_queue.h"
+#include "log.h"
 
 void
 lq_init (struct lease_queue *lq)
@@ -110,5 +112,22 @@ lq_remove (struct lease_queue *lq, size_t i)
     memcpy (parent, &tmp, sizeof (struct lease));
 
     pi = mi;
+  }
+}
+
+void
+lq_dump (struct lease_queue *lq)
+{
+  for (int i = 0; i < lq->nleases; i++) {
+    struct lease *lease = &lq->leases[i];
+
+    struct in_addr in_addr = { .s_addr = lease->in_addr };
+    char buf[INET_ADDRSTRLEN];
+    inet_ntop(AF_INET, &in_addr, buf, sizeof (buf));
+
+    char *expire = ctime (&lease->expire);
+    char *ether = ether_ntoa (&lease->ether_addr);
+
+    log_info ("%s, %s, %s\n", buf, ether, expire);
   }
 }

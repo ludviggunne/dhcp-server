@@ -47,4 +47,7 @@ void lq_pop (struct lease_queue *lq);
 /* Remove lease at specified index */
 void lq_remove (struct lease_queue *lq, size_t i);
 
+/* Print the contents of the lease queue */
+void lq_dump (struct lease_queue *lq);
+
 #endif
