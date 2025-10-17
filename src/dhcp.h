@@ -10,7 +10,7 @@
 
 #define DHCP_OPT_MAXLEN 256
 
-typedef struct __attribute__((packed)) dhcp_msg {
+struct __attribute__((packed)) dhcp_msg {
   uint8_t op;
   uint8_t htype;
   uint8_t hlen;
@@ -26,25 +26,25 @@ typedef struct __attribute__((packed)) dhcp_msg {
   uint8_t sname[64];
   uint8_t file[128];
   uint8_t options[312];
-} dhcp_msg_t;
+};
 
-typedef struct dhcp_opt {
+struct dhcp_opt {
   uint8_t buf[DHCP_OPT_MAXLEN];
   uint8_t len;
   uint8_t tag;
-} dhcp_opt_t;
+};
 
-typedef struct dhcp_opt_iterator {
+struct dhcp_opt_iterator {
   uint8_t *opts;
   size_t left;
   int done;
-} dhcp_opt_iterator_t;
+};
 
-dhcp_opt_iterator_t dhcp_opt_iterator_init (dhcp_msg_t *msg);
-int dhcp_opt_add_magic_cookie (dhcp_opt_iterator_t *it);
-int dhcp_opt_take_magic_cookie (dhcp_opt_iterator_t *it);
-int dhcp_opt_add_option (const dhcp_opt_t *opt, dhcp_opt_iterator_t *it);
-int dhcp_opt_take_option (dhcp_opt_t *opt, dhcp_opt_iterator_t *it);
+struct dhcp_opt_iterator dhcp_opt_iterator_init (struct dhcp_msg *msg);
+int dhcp_opt_add_magic_cookie (struct dhcp_opt_iterator *it);
+int dhcp_opt_take_magic_cookie (struct dhcp_opt_iterator *it);
+int dhcp_opt_add_option (const struct dhcp_opt *opt, struct dhcp_opt_iterator *it);
+int dhcp_opt_take_option (struct dhcp_opt *opt, struct dhcp_opt_iterator *it);
 
 const char *dhcp_msg_type_str (uint8_t type);
 const char *dhcp_opt_str (uint8_t opt);
