@@ -84,8 +84,8 @@ main (int argc, char **argv)
 
     struct dhcp_msg msg;
     memset (&msg, 0, sizeof (msg));
-    if (read (sockfd, &msg, sizeof (msg)) < 0) {
-      log_errno ("read()");
+    if (recvfrom (sockfd, &msg, sizeof (msg), 0, NULL, NULL) < 0) {
+      log_errno ("recvfrom()");
       continue;
     }
 
