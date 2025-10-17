@@ -36,6 +36,14 @@ main (int argc, char **argv)
   struct sockaddr_in sockaddr;
   int en_broadcast = 1;
 
+  /* Default configuration */
+  g_conf.subnet_mask = htonl (0xffffff00); /* 255.255.255.0 */
+  g_conf.interface = "eth0";
+  g_conf.lease_time = 24 * 3600;           /* 24h */
+  g_conf.range_lo = htonl (0xc0a8001);     /* 192.168.0.1 */
+  g_conf.range_hi = htonl (0xc0a80fe);     /* 192.168.0.254 */
+  g_conf.request_window = 1;               /* 1s */
+
   if (argc > 1)
     conf_path = argv[1];
 
