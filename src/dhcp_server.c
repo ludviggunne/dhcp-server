@@ -125,12 +125,8 @@ main (int argc, char **argv)
       continue;
     }
 
-    if (msg.hlen != ETHER_ADDR_LEN) {
-      log_error ("Hardware address length is %d != %d", msg.hlen, ETHER_ADDR_LEN);
+    if (msg.hlen != ETHER_ADDR_LEN)
       continue;
-    }
-
-    log_info ("Received message from %s", ether_ntoa ((struct ether_addr *) msg.chaddr));
 
     struct dhcp_oit it = dhcp_oit_init(&msg);
     struct dhcp_opt opt;
@@ -147,17 +143,21 @@ main (int argc, char **argv)
         log_error ("Error while parsing options");
         break;
       }
+
       if (opt.tag == DHCP_OPT_DHCP_MESSAGE_TYPE) {
         have_msg_type = 1;
         type = opt.buf[0];
-        break;
       }
+
+      if (opt.tag == DHCP_OPT_HOST_NAME_OPTION)
+        log_info ("Hostname is %.*s", (int) opt.len, opt.buf);
     }
 
     if (!have_msg_type)
       continue;
 
-    log_info ("Message type is %s", dhcp_msg_type_str (type));
+    log_info ("Received %s from %s", dhcp_msg_type_str (type),
+              ether_ntoa ((struct ether_addr *) msg.chaddr));
 
     switch (type) {
     case DHCP_MSG_TYPE_DHCPDISCOVER:
@@ -306,7 +306,12 @@ process_request (struct dhcp_msg *msg)
     if (opt.tag == DHCP_OPT_REQUESTED_IP_ADDRESS) {
       memcpy (&req_addr, opt.buf, 4);
       log_info ("Requested address is %s", inet_str (req_addr));
-      break;
+      continue;
+    }
+
+    if (opt.tag == DHCP_OPT_SERVER_IDENTIFIER &&
+        memcmp (opt.buf, &g_server_addr, 4) != 0) {
+      return;
     }
   }
 
@@ -330,8 +335,8 @@ process_request (struct dhcp_msg *msg)
     msg_type = DHCP_MSG_TYPE_DHCPNAK;
   } else if (lease_id >= 0) {
     /* Remove existing lease */
-    lq_remove (&g_leaseq, lease_id);
     in_addr = g_leaseq.leases[lease_id].in_addr;
+    lq_remove (&g_leaseq, lease_id);
   }
 
   uint32_t lease_time = g_conf.lease_time;
@@ -391,7 +396,6 @@ process_request (struct dhcp_msg *msg)
   else
     reply.yiaddr = 0;
 
-  memset (reply.sname, 0, sizeof (reply.sname));
   memset (reply.file, 0, sizeof (reply.file));
   memcpy (reply.sname, g_hostname, sizeof (reply.sname) - 1);
 
