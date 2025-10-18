@@ -109,7 +109,8 @@ main (int argc, char **argv)
     /* Check for expired leases */
     time_t now = time (NULL);
     while (g_leaseq.nleases > 0 && now > g_leaseq.leases[0].expire) {
-      log_info ("Lease for %s expired", ether_ntoa (&g_leaseq.leases[0].ether_addr));
+      log_info ("expire %s -> %s", ether_ntoa (&g_leaseq.leases[0].ether_addr),
+                inet_str (g_leaseq.leases[0].in_addr));
       as_free (&g_aspace, g_leaseq.leases[0].in_addr);
       lq_pop (&g_leaseq);
     }
@@ -136,6 +137,7 @@ main (int argc, char **argv)
       continue;
     }
 
+    char *hostname = NULL;
     int have_msg_type = 0;
     enum dhcp_msg_type type;
     while (!it.done) {
@@ -150,14 +152,16 @@ main (int argc, char **argv)
       }
 
       if (opt.tag == DHCP_OPT_HOST_NAME_OPTION)
-        log_info ("Hostname is %.*s", (int) opt.len, opt.buf);
+        hostname = strndup ((char *) opt.buf, opt.len);
     }
 
     if (!have_msg_type)
       continue;
 
-    log_info ("Received %s from %s", dhcp_msg_type_str (type),
-              ether_ntoa ((struct ether_addr *) msg.chaddr));
+    log_info ("[%s] %s (%s)", dhcp_msg_type_str (type),
+              ether_ntoa ((struct ether_addr *) msg.chaddr),
+              hostname ? hostname : "<unknown>");
+    free (hostname);
 
     switch (type) {
     case DHCP_MSG_TYPE_DHCPDISCOVER:
@@ -188,7 +192,6 @@ process_discover (struct dhcp_msg *msg)
   for (int i = 0; i < g_leaseq.nleases; i++) {
     struct ether_addr *ether = &g_leaseq.leases[i].ether_addr;
     if (memcmp (ether, msg->chaddr, sizeof (*ether)) == 0) {
-      log_info ("Host already has a lease, ignoring discovery message");
       return;
     }
   }
@@ -206,19 +209,18 @@ process_discover (struct dhcp_msg *msg)
   /* Determine address and lease time */
   in_addr_t in_addr;
   uint32_t lease_time;
+  const char *alloc_type;
   if (sconf) {
     in_addr = sconf->in_addr;
     lease_time = (uint32_t) sconf->lease_time;
-    log_info ("Host is statically configured with address %s",
-              inet_str (in_addr));
+    alloc_type = "static";
   } else {
     if (as_alloc (&g_aspace, &in_addr) < 0) {
       log_error ("Out of addresses");
       return;
     }
     lease_time = (uint32_t) g_conf.lease_time;
-    log_info ("Host is dynamically assigned address %s",
-              inet_str (in_addr));
+    alloc_type = "dynamic";
   }
 
   /* Reserve address during request window */
@@ -279,7 +281,8 @@ process_discover (struct dhcp_msg *msg)
   dhcp_opt_add (&opt, &it);
 
   /* Send reply */
-  log_info ("Replying with %s", dhcp_msg_type_str (DHCP_MSG_TYPE_DHCPOFFER));
+  log_info ("[%s] %s (%s)", dhcp_msg_type_str (DHCP_MSG_TYPE_DHCPOFFER),
+            inet_str (in_addr), alloc_type);
   if (sendto (g_sockfd, &reply, sizeof (reply), 0,
               (struct sockaddr*) &client_addr, sizeof (client_addr)) < 0)
     log_errno ("sendto() failed");
@@ -305,7 +308,6 @@ process_request (struct dhcp_msg *msg)
 
     if (opt.tag == DHCP_OPT_REQUESTED_IP_ADDRESS) {
       memcpy (&req_addr, opt.buf, 4);
-      log_info ("Requested address is %s", inet_str (req_addr));
       continue;
     }
 
@@ -320,7 +322,6 @@ process_request (struct dhcp_msg *msg)
   for (int i = 0; i < g_leaseq.nleases; i++) {
     struct ether_addr *ether = &g_leaseq.leases[i].ether_addr;
     if (memcmp (ether, msg->chaddr, sizeof (*ether)) == 0) {
-      log_info ("Lease exists");
       lease_id = i;
       break;
     }
@@ -329,9 +330,11 @@ process_request (struct dhcp_msg *msg)
   /* Refuse if requested address doesn't match
    * existing lease. */
   in_addr_t in_addr;
+  const char *nak_reason = NULL;
   if (lease_id >= 0 && req_addr != 0 && g_leaseq.leases[lease_id].in_addr != req_addr) {
-    log_error ("Requested address doesn't match existing lease (%s)",
+    log_info ("%s =/= %s", inet_str (req_addr),
                inet_str (g_leaseq.leases[lease_id].in_addr));
+    nak_reason = "The requested address does not match an existing lease";
     msg_type = DHCP_MSG_TYPE_DHCPNAK;
   } else if (lease_id >= 0) {
     /* Remove existing lease */
@@ -347,7 +350,6 @@ process_request (struct dhcp_msg *msg)
     for (int i = 0; i < g_conf.nstatic_confs; i++) {
       struct ether_addr *ether = &g_conf.static_confs[i].ether_addr;
       if (memcmp (ether, msg->chaddr, sizeof (*ether)) == 0) {
-        log_info ("Static configuration exists");
         sconf = &g_conf.static_confs[i];
         lease_time = sconf->lease_time;
         break;
@@ -357,9 +359,8 @@ process_request (struct dhcp_msg *msg)
     /* Refuse if requested address doesn't match
      * static configuration */
     if (sconf && req_addr != 0 && sconf->in_addr != req_addr) {
-      log_error ("Requested address doesn't match static configuration (%s)",
-                 inet_str (sconf->in_addr));
       msg_type = DHCP_MSG_TYPE_DHCPNAK;
+      nak_reason = "The requested address does not match the static configuration of this host";
     } else if (sconf) {
       in_addr = sconf->in_addr;
     }
@@ -368,12 +369,12 @@ process_request (struct dhcp_msg *msg)
      * configuration -> refuse */
     if (lease_id < 0 && sconf == NULL) {
       msg_type = DHCP_MSG_TYPE_DHCPNAK;
+      nak_reason = "There is no existing lease or static configuration for this host";
     }
   }
 
   /* Create new lease */
   if (msg_type != DHCP_MSG_TYPE_DHCPNAK) {
-    log_info ("Updating lease");
     struct lease lease;
     lease.in_addr = in_addr;
     memcpy (&lease.ether_addr, msg->chaddr, sizeof (lease.ether_addr));
@@ -436,7 +437,9 @@ process_request (struct dhcp_msg *msg)
   dhcp_opt_add (&opt, &it);
 
   /* Send reply */
-  log_info ("Replying with %s", dhcp_msg_type_str (msg_type));
+  log_info ("[%s] %s", dhcp_msg_type_str (msg_type),
+            msg_type == DHCP_MSG_TYPE_DHCPACK ?
+              inet_str (in_addr) : nak_reason);
   if (sendto (g_sockfd, &reply, sizeof (reply), 0,
               (struct sockaddr*) &client_addr, sizeof (client_addr)) < 0)
     log_errno ("sendto() failed");
