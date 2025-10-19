@@ -13,6 +13,12 @@
 #include "dhcp_server.h"
 #include "log.h"
 
+#ifdef DHCP_SERVER_DEBUG
+#define debug(...) log_info("[DEBUG] " __VA_ARGS__)
+#else
+#define debug(...)
+#endif
+
 struct conf g_conf;
 struct lease_queue g_leaseq;
 struct addr_space g_aspace;
@@ -177,7 +183,7 @@ main (int argc, char **argv)
     //   process_decline(&msg);
     //   break;
     default:
-      log_info ("Unhandled message type");
+      debug ("Unhandled message type %s", dhcp_msg_type_str (type));
       break;
     }
   }
@@ -192,6 +198,7 @@ process_discover (struct dhcp_msg *msg)
   for (int i = 0; i < g_leaseq.nleases; i++) {
     struct ether_addr *ether = &g_leaseq.leases[i].ether_addr;
     if (memcmp (ether, msg->chaddr, sizeof (*ether)) == 0) {
+      debug ("Lease exists");
       return;
     }
   }
@@ -313,6 +320,7 @@ process_request (struct dhcp_msg *msg)
 
     if (opt.tag == DHCP_OPT_SERVER_IDENTIFIER &&
         memcmp (opt.buf, &g_server_addr, 4) != 0) {
+      debug ("Wrong server id");
       return;
     }
   }
