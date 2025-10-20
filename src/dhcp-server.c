@@ -10,7 +10,7 @@
 #include <arpa/inet.h>
 
 #include "dhcp.h"
-#include "dhcp_server.h"
+#include "dhcp-server.h"
 #include "log.h"
 
 #ifdef DHCP_SERVER_DEBUG
