@@ -1,4 +1,4 @@
-override CFLAGS:=-g -O0 -Wno-cpp $(CFLAGS)
+override CFLAGS:=-O3 $(CFLAGS)
 LDFLAGS=
 
 sources=$(wildcard src/*.c)
